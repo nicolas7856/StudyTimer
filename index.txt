@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Timer Studio Alternato</title>
+    <style>
+        :root {
+            --bg-color: #121212;
+            --container-bg: #1e1e1e;
+            --text-color: #e0e0e0;
+            --accent-color: #4CAF50;
+            --danger-color: #f44336;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+
+        .app-container {
+            background-color: var(--container-bg);
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.5);
+            width: 100%;
+            max-width: 400px;
+            text-align: center;
+        }
+
+        .phase-display {
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            min-height: 2rem;
+        }
+
+        .timer-display {
+            font-size: 5rem;
+            font-variant-numeric: tabular-nums;
+            margin: 1rem 0;
+            font-weight: 300;
+        }
+
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        button {
+            background-color: var(--accent-color);
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 6px;
+            font-size: 1rem;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        button:hover {
+            opacity: 0.9;
+        }
+
+        button:disabled {
+            background-color: #555;
+            cursor: not-allowed;
+        }
+
+        #btn-pause { background-color: #ff9800; }
+        #btn-reset { background-color: var(--danger-color); }
+
+        .settings-panel {
+            background-color: rgba(255,255,255,0.05);
+            padding: 1rem;
+            border-radius: 8px;
+            text-align: left;
+        }
+
+        .settings-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            font-size: 0.9rem;
+            border-bottom: 1px solid #333;
+            padding-bottom: 0.5rem;
+        }
+
+        .phase-row {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+            align-items: center;
+        }
+
+        input[type="text"], input[type="number"] {
+            background-color: #333;
+            border: 1px solid #444;
+            color: white;
+            padding: 0.5rem;
+            border-radius: 4px;
+        }
+
+        input[type="text"] { flex: 2; }
+        input[type="number"] { flex: 1; width: 60px; }
+
+        .btn-add {
+            width: 100%;
+            background-color: #333;
+            margin-top: 1rem;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="app-container">
+        <div class="phase-display" id="current-phase-label">Pronto</div>
+        <div class="timer-display" id="time-left">00:00</div>
+        
+        <div class="controls">
+            <button id="btn-start">Start</button>
+            <button id="btn-pause" disabled>Pausa</button>
+            <button id="btn-reset">Reset</button>
+        </div>
+
+        <div class="settings-panel">
+            <div class="settings-header">
+                <span>Configurazione Cicli</span>
+                <label>
+                    <input type="checkbox" id="sound-toggle" checked> Suono
+                </label>
+            </div>
+            
+            <div id="phases-list">
+                <div class="phase-row">
+                    <input type="text" value="Studio" class="phase-name" placeholder="Nome fase">
+                    <input type="number" value="10" class="phase-duration" min="1" placeholder="Min">
+                </div>
+                <div class="phase-row">
+                    <input type="text" value="Riposo" class="phase-name" placeholder="Nome fase">
+                    <input type="number" value="5" class="phase-duration" min="1" placeholder="Min">
+                </div>
+            </div>
+            <button class="btn-add" id="btn-add-phase">+ Aggiungi Fase</button>
+        </div>
+    </div>
+
+    <script>
+        // Gestione Stato Timer
+        let phases = [];
+        let currentPhaseIndex = 0;
+        let timeRemainingSeconds = 0;
+        let timerInterval = null;
+        let isRunning = false;
+
+        // Riferimenti DOM
+        const displayTime = document.getElementById('time-left');
+        const displayPhase = document.getElementById('current-phase-label');
+        const btnStart = document.getElementById('btn-start');
+        const btnPause = document.getElementById('btn-pause');
+        const btnReset = document.getElementById('btn-reset');
+        const soundToggle = document.getElementById('sound-toggle');
+        const phasesList = document.getElementById('phases-list');
+        const btnAddPhase = document.getElementById('btn-add-phase');
+
+        // Audio Context per il bip sonoro (senza file esterni)
+        function playBeep() {
+            if (!soundToggle.checked) return;
+            try {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                const ctx = new AudioContext();
+                const oscillator = ctx.createOscillator();
+                const gainNode = ctx.createGain();
+                
+                oscillator.type = 'sine';
+                oscillator.frequency.setValueAtTime(880, ctx.currentTime); // 880Hz nota A5
+                
+                gainNode.gain.setValueAtTime(0.1, ctx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + 1);
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(ctx.destination);
+                
+                oscillator.start();
+                oscillator.stop(ctx.currentTime + 1);
+            } catch (e) {
+                console.error("Errore Web Audio API:", e);
+            }
+        }
+
+        // Formattazione del tempo in MM:SS
+        function formatTime(totalSeconds) {
+            const minutes = Math.floor(totalSeconds / 60);
+            const seconds = totalSeconds % 60;
+            return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        }
+
+        function updateDisplay() {
+            displayTime.textContent = formatTime(timeRemainingSeconds);
+        }
+
+        // Estrae i dati dagli input HTML per generare l'array dei cicli
+        function parsePhasesFromInputs() {
+            phases = [];
+            const rows = document.querySelectorAll('.phase-row');
+            rows.forEach(row => {
+                const name = row.querySelector('.phase-name').value.trim() || 'Fase';
+                const durationMinutes = parseInt(row.querySelector('.phase-duration').value) || 1;
+                phases.push({ name, duration: durationMinutes * 60 });
+            });
+        }
+
+        // Motore del timer
+        function tick() {
+            if (timeRemainingSeconds > 0) {
+                timeRemainingSeconds--;
+                updateDisplay();
+            } else {
+                playBeep();
+                // Passa alla fase successiva (ciclo infinito)
+                currentPhaseIndex = (currentPhaseIndex + 1) % phases.length;
+                loadPhase(currentPhaseIndex);
+            }
+        }
+
+        function loadPhase(index) {
+            timeRemainingSeconds = phases[index].duration;
+            displayPhase.textContent = phases[index].name;
+            updateDisplay();
+        }
+
+        // Event Listeners dei controlli
+        btnStart.addEventListener('click', () => {
+            if (isRunning) return;
+            
+            // Carica le fasi solo se è l'inizio di un nuovo ciclo da fermo
+            if (!timerInterval && timeRemainingSeconds === 0) {
+                parsePhasesFromInputs();
+                if (phases.length === 0) return;
+                currentPhaseIndex = 0;
+                loadPhase(currentPhaseIndex);
+            }
+
+            isRunning = true;
+            btnStart.disabled = true;
+            btnPause.disabled = false;
+            
+            // Disabilita modifiche durante l'esecuzione
+            document.querySelectorAll('.phase-row input').forEach(inp => inp.disabled = true);
+            
+            timerInterval = setInterval(tick, 1000);
+        });
+
+        btnPause.addEventListener('click', () => {
+            if (!isRunning) return;
+            clearInterval(timerInterval);
+            isRunning = false;
+            btnStart.disabled = false;
+            btnPause.disabled = true;
+        });
+
+        btnReset.addEventListener('click', () => {
+            clearInterval(timerInterval);
+            timerInterval = null;
+            isRunning = false;
+            timeRemainingSeconds = 0;
+            
+            btnStart.disabled = false;
+            btnPause.disabled = true;
+            
+            displayPhase.textContent = "Pronto";
+            displayTime.textContent = "00:00";
+            
+            // Riabilita modifiche
+            document.querySelectorAll('.phase-row input').forEach(inp => inp.disabled = false);
+        });
+
+        // Aggiunta dinamica di nuove fasi
+        btnAddPhase.addEventListener('click', () => {
+            const row = document.createElement('div');
+            row.className = 'phase-row';
+            row.innerHTML = `
+                <input type="text" value="Nuova Fase" class="phase-name" placeholder="Nome fase">
+                <input type="number" value="5" class="phase-duration" min="1" placeholder="Min">
+                <button onclick="this.parentElement.remove()" style="padding: 0.5rem; background: var(--danger-color);">X</button>
+            `;
+            phasesList.appendChild(row);
+        });
+
+        // Inizializzazione della vista al caricamento
+        parsePhasesFromInputs();
+        if(phases.length > 0) {
+            displayTime.textContent = formatTime(phases[0].duration);
+        }
+    </script>
+</body>
+</html>
