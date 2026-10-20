@@ -187,13 +187,13 @@
                 oscillator.frequency.setValueAtTime(880, ctx.currentTime); // 880Hz nota A5
                 
                 gainNode.gain.setValueAtTime(0.1, ctx.currentTime);
-                gainNode.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + 1);
+                gainNode.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + 2);
                 
                 oscillator.connect(gainNode);
                 gainNode.connect(ctx.destination);
                 
                 oscillator.start();
-                oscillator.stop(ctx.currentTime + 1);
+                oscillator.stop(ctx.currentTime + 2);
             } catch (e) {
                 console.error("Errore Web Audio API:", e);
             }
